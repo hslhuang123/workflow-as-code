@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ from wf.registries import Registries, ValidationError
 from wf.runtime import WorkflowRuntime
 from wf.trace import TraceError, format_trace
 from wf.validate import WorkflowValidationError, validate_ir
+from wf.scaffold import ScaffoldError, init_workflow, normalize_name
 
 
 class MvpTests(unittest.TestCase):
@@ -362,6 +364,65 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(captured["headers"]["user-agent"], "workflow-as-code/0.1.0")
         self.assertEqual(captured["headers"]["accept"], "application/json")
         self.assertEqual(captured["timeout"], 60)
+
+    def test_scaffold_basic_workflow_runs(self) -> None:
+        base = Path("tmp_scaffold_tests")
+        shutil.rmtree(base, ignore_errors=True)
+        try:
+            result = init_workflow("Hello World", base_dir=base, with_test=True)
+            self.assertEqual(result.name, "hello_world")
+            ir = compile_file(result.workflow_path)
+            payload = json.loads(result.input_path.read_text(encoding="utf-8"))
+            with tempfile.TemporaryDirectory() as tmp:
+                run = WorkflowRuntime(ir, run_root=tmp).run(payload, auto_approve=True)
+            self.assertEqual(run.output, {"message": "Hello, Michael!"})
+            self.assertTrue((Path("tests") / "test_hello_world.py").exists())
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            (Path("tests") / "test_hello_world.py").unlink(missing_ok=True)
+
+    def test_scaffold_templates_validate_and_run(self) -> None:
+        base = Path("tmp_scaffold_templates")
+        shutil.rmtree(base, ignore_errors=True)
+        try:
+            for template in ("basic", "router", "agent", "human"):
+                result = init_workflow(f"demo_{template}", template=template, base_dir=base)
+                ir = compile_file(result.workflow_path)
+                validate_ir(ir)
+                payload = json.loads(result.input_path.read_text(encoding="utf-8"))
+                with tempfile.TemporaryDirectory() as tmp:
+                    run = WorkflowRuntime(ir, run_root=tmp).run(payload, auto_approve=True)
+                self.assertIsInstance(run.output, dict)
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+
+    def test_scaffold_name_safety_and_force(self) -> None:
+        self.assertEqual(normalize_name("Pizza Order"), "pizza_order")
+        with self.assertRaises(ScaffoldError):
+            normalize_name("../bad")
+        base = Path("tmp_scaffold_force")
+        shutil.rmtree(base, ignore_errors=True)
+        try:
+            init_workflow("Pizza Order", base_dir=base)
+            with self.assertRaises(ScaffoldError):
+                init_workflow("pizza_order", base_dir=base)
+            init_workflow("pizza_order", base_dir=base, force=True)
+            self.assertTrue((base / "pizza_order" / "workflow.yaml").exists())
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+
+    def test_scaffold_cli_init(self) -> None:
+        base = Path("tmp_scaffold_cli")
+        shutil.rmtree(base, ignore_errors=True)
+        try:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli_main(["init", "CLI Demo", "--dir", str(base), "--template", "basic"]), 0)
+            self.assertIn("created workflow: cli_demo", stdout.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli_main(["validate", str(base / "cli_demo" / "workflow.yaml")]), 0)
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
 
 
 

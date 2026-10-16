@@ -98,6 +98,12 @@ Run YAML directly:
 wf run-yaml examples/restaurant_takeout/workflow.yaml --input examples/restaurant_takeout/input.json
 ```
 
+Scaffold a new workflow:
+
+```bash
+wf init my_workflow --template basic
+```
+
 Inspect traces:
 
 ```bash
@@ -120,7 +126,9 @@ python -m unittest discover -s tests
 - Anthropic provider behavior must stay isolated behind the provider interface and covered by stubbed transport tests.
 - Provider names are `fake`, `anthropic`, and `fuelix`; keep provider adapters behind `wf.providers.create_provider`.
 - Fuel iX uses the Anthropic-compatible provider path with `FUELIX_API_KEY` or `ANTHROPIC_AUTH_TOKEN`.
-- When adding a workflow, add a test in `tests/test_mvp.py` that compiles and runs it.
+- `wf init` owns workflow scaffolding; templates must generate workflows that validate and run before edits.
+- Scaffolded workflow names are normalized and must not permit path traversal.
+- When adding a hand-written workflow, add a test in `tests/test_mvp.py` or a dedicated `tests/test_<workflow>.py` that compiles and runs it.
 
 ## Current example workflows
 

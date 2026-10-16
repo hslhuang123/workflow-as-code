@@ -227,22 +227,62 @@ Provider rules:
 - agent output must be valid JSON matching the node `output_schema`
 - agents may call only tools listed on the node
 
-## Build a new workflow
+## Create your first workflow
 
-1. Create a folder:
+Use `wf init` to scaffold a valid workflow folder:
 
 ```bash
-mkdir -p examples/my_workflow
-touch examples/my_workflow/__init__.py
+wf init my_workflow
+wf validate examples/my_workflow/workflow.yaml
+wf run-yaml examples/my_workflow/workflow.yaml --input examples/my_workflow/input.json
 ```
 
-2. Add data contracts in `schemas.py`.
-3. Add deterministic functions in `tasks.py`.
-4. Add tools in `tools.py`, or a placeholder docstring if unused.
-5. Add sample input in `input.json`.
-6. Add graph wiring in `workflow.yaml`.
-7. Validate, compile, run.
-8. Add a test in `tests/test_mvp.py`.
+Expected output from the default `basic` template:
+
+```json
+{
+  "message": "Hello, Michael!"
+}
+```
+
+The command creates:
+
+```text
+examples/my_workflow/
+  __init__.py
+  workflow.yaml
+  input.json
+  schemas.py
+  tasks.py
+  tools.py
+```
+
+Templates:
+
+| Template | Shape |
+|---|---|
+| `basic` | task → output |
+| `router` | task → router → two outputs |
+| `agent` | task → agent → output |
+| `human` | task → human approval → output |
+
+Examples:
+
+```bash
+wf init route_demo --template router
+wf init agent_demo --template agent
+wf init human_demo --template human --with-test
+wf init custom_location --dir workflows
+```
+
+Useful flags:
+
+- `--template basic|router|agent|human`
+- `--dir <directory>` to scaffold outside `examples/`
+- `--with-test` to generate `tests/test_<name>.py`
+- `--force` to replace an existing generated workflow folder
+
+`workflow.yaml` references Python registries in `tasks.py`, `tools.py`, and `schemas.py`. After editing generated files, rerun `wf validate` before running the workflow.
 
 ## IR
 

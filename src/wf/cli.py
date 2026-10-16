@@ -7,6 +7,7 @@ from pathlib import Path
 
 from wf.compiler import compile_file, read_ir, write_ir
 from wf.providers import PROVIDER_NAMES, create_provider
+from wf.scaffold import TEMPLATES, init_workflow
 from wf.runtime import WorkflowRuntime
 from wf.trace import format_trace, latest_trace
 from wf.validate import validate_ir
@@ -35,6 +36,13 @@ def main(argv: list[str] | None = None) -> int:
     trace_parser.add_argument("--latest", action="store_true", help="use latest runs/*/trace.jsonl")
     trace_parser.add_argument("--run-root", default="runs", help="run directory for --latest")
 
+    init_parser = sub.add_parser("init", help="create a new workflow folder from a template")
+    init_parser.add_argument("name", help="workflow name")
+    init_parser.add_argument("--template", default="basic", choices=TEMPLATES, help="workflow template")
+    init_parser.add_argument("--dir", default="examples", help="destination directory")
+    init_parser.add_argument("--force", action="store_true", help="replace an existing workflow folder")
+    init_parser.add_argument("--with-test", action="store_true", help="generate a unittest file")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "validate":
@@ -61,6 +69,21 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 raise ValueError("trace requires a path or --latest")
             print(format_trace(path))
+            return 0
+        if args.command == "init":
+            result = init_workflow(
+                args.name,
+                template=args.template,
+                base_dir=args.dir,
+                force=args.force,
+                with_test=args.with_test,
+            )
+            print(f"created workflow: {result.name}")
+            print(f"directory: {result.directory}")
+            print(f"workflow: {result.workflow_path}")
+            print(f"input: {result.input_path}")
+            if result.test_path:
+                print(f"test: {result.test_path}")
             return 0
         raise AssertionError(args.command)
     except Exception as exc:
