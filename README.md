@@ -166,6 +166,7 @@ Agent nodes use a provider selected at runtime.
 |---|---|
 | `fake` | Default deterministic provider for tests and local demos |
 | `anthropic` | Real Anthropic Messages API adapter |
+| `fuelix` | Fuel iX Anthropic-compatible API adapter |
 
 Use the fake provider explicitly:
 
@@ -186,13 +187,32 @@ ANTHROPIC_API_KEY=... wf run-yaml examples/support/workflow.yaml \
   --auto-approve
 ```
 
+Use Fuel iX when credentials are available:
+
+```bash
+FUELIX_API_KEY=... wf run-yaml examples/support/workflow.yaml \
+  --input examples/support/input.json \
+  --provider fuelix \
+  --model claude-3-5-sonnet-20241022 \
+  --auto-approve
+```
+
+Fuel iX also accepts the Claude Code-style environment variables:
+
+```bash
+ANTHROPIC_BASE_URL=https://api.fuelix.ai
+ANTHROPIC_AUTH_TOKEN=...
+```
+
 Provider rules:
 
 - default provider: `fake`
-- allowed providers: `fake`, `anthropic`
-- Anthropic is non-streaming in this phase
+- allowed providers: `fake`, `anthropic`, `fuelix`
+- Anthropic and Fuel iX are non-streaming in this phase
 - Anthropic requires `ANTHROPIC_API_KEY`
-- Anthropic model can be set with `--model` or `ANTHROPIC_MODEL`
+- Fuel iX requires `FUELIX_API_KEY` or `ANTHROPIC_AUTH_TOKEN`
+- Fuel iX base URL defaults to `https://api.fuelix.ai`; override with `FUELIX_BASE_URL` or `ANTHROPIC_BASE_URL`
+- model can be set with `--model`, `ANTHROPIC_MODEL`, or provider-specific configuration
 - agent output must be valid JSON matching the node `output_schema`
 - agents may call only tools listed on the node
 

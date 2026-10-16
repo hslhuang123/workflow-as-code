@@ -15,7 +15,8 @@ from wf.registries import Registries, to_plain, validate_call_inputs
 
 DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-
+FUELIX_BASE_URL = "https://api.fuelix.ai"
+FUELIX_API_URL = f"{FUELIX_BASE_URL}/v1/messages"
 
 class AnthropicProviderError(ValueError):
     pass
@@ -31,14 +32,20 @@ class AnthropicAgentProvider:
         api_key: str | None = None,
         model: str | None = None,
         transport: Transport | None = None,
+        api_url: str = ANTHROPIC_API_URL,
+        provider_name: str = "anthropic",
+        auth_mode: str = "x-api-key",
     ):
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         self.model = model or os.environ.get("ANTHROPIC_MODEL") or DEFAULT_ANTHROPIC_MODEL
+        self.api_url = api_url
+        self.provider_name = provider_name
+        self.auth_mode = auth_mode
         self.transport = transport or self._http_transport
 
     def run_agent(self, *, node: Node, inputs: dict[str, Any], registries: Registries) -> AgentResult:
         if not self.api_key and self.transport == self._http_transport:
-            raise AnthropicProviderError("ANTHROPIC_API_KEY is required for provider 'anthropic'")
+            raise AnthropicProviderError(f"API key is required for provider {self.provider_name!r}")
         allowed_tools = set(node.tools)
         messages: list[dict[str, Any]] = [
             {
@@ -95,14 +102,18 @@ class AnthropicAgentProvider:
         }
 
     def _http_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
+        headers = {
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01",
+        }
+        if self.auth_mode == "bearer":
+            headers["authorization"] = f"Bearer {self.api_key or ''}"
+        else:
+            headers["x-api-key"] = self.api_key or ""
         request = urllib.request.Request(
-            ANTHROPIC_API_URL,
+            self.api_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "content-type": "application/json",
-                "x-api-key": self.api_key or "",
-                "anthropic-version": "2023-06-01",
-            },
+            headers=headers,
             method="POST",
         )
         try:
@@ -110,9 +121,38 @@ class AnthropicAgentProvider:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise AnthropicProviderError(f"Anthropic API error {exc.code}: {body}") from exc
+            raise AnthropicProviderError(f"{self.provider_name} API error {exc.code}: {body}") from exc
         except urllib.error.URLError as exc:
-            raise AnthropicProviderError(f"Anthropic API request failed: {exc.reason}") from exc
+            raise AnthropicProviderError(f"{self.provider_name} API request failed: {exc.reason}") from exc
+
+
+class FuelIXAgentProvider(AnthropicAgentProvider):
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str | None = None,
+        transport: Transport | None = None,
+        api_url: str | None = None,
+    ):
+        base_url = os.environ.get("FUELIX_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL") or FUELIX_BASE_URL
+        resolved_url = api_url or _messages_url(base_url)
+        token = api_key or os.environ.get("FUELIX_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        super().__init__(
+            api_key=token,
+            model=model,
+            transport=transport,
+            api_url=resolved_url,
+            provider_name="fuelix",
+            auth_mode="bearer",
+        )
+
+
+def _messages_url(base_url: str) -> str:
+    cleaned = base_url.rstrip("/")
+    if cleaned.endswith("/v1/messages"):
+        return cleaned
+    return f"{cleaned}/v1/messages"
 
 
 def _system_prompt(node: Node) -> str:

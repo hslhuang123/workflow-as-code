@@ -10,7 +10,8 @@ from pathlib import Path
 from wf.cli import main as cli_main
 from wf.compiler import compile_file, write_ir
 from wf.ir import Node
-from wf.providers.anthropic import AnthropicAgentProvider, AnthropicProviderError
+from wf.providers import PROVIDER_NAMES, create_provider
+from wf.providers.anthropic import AnthropicAgentProvider, AnthropicProviderError, FuelIXAgentProvider
 from wf.registries import Registries, ValidationError
 from wf.runtime import WorkflowRuntime
 from wf.trace import TraceError, format_trace
@@ -286,6 +287,44 @@ class MvpTests(unittest.TestCase):
         with self.assertRaises(AnthropicProviderError) as tool_error:
             undeclared_tool_provider.run_agent(node=node, inputs={}, registries=registries)
         self.assertIn("undeclared tool", str(tool_error.exception))
+
+    def test_fuelix_provider_contract_valid_output(self) -> None:
+        captured: dict[str, object] = {}
+
+        def transport(payload: dict[str, object]) -> dict[str, object]:
+            captured.update(payload)
+            return {
+                "content": [{"type": "text", "text": '{"category":"refund","confidence":0.9,"rationale":"stub"}'}],
+                "usage": {"input_tokens": 8, "output_tokens": 7},
+            }
+
+        provider = FuelIXAgentProvider(api_key="fuelix-test", model="fuelix-model", transport=transport)
+        registries = Registries.load({
+            "tasks": "examples.support.tasks",
+            "tools": "examples.support.tools",
+            "schemas": "examples.support.schemas",
+        })
+        node = Node(
+            id="classify_ticket",
+            kind="agent",
+            instructions="Classify.",
+            output_schema="Classification",
+            tools=["search_knowledge_base"],
+            policy={"max_steps": 2, "max_tokens": 100},
+        )
+
+        result = provider.run_agent(node=node, inputs={"ticket": {"subject": "Refund", "body": "charged"}}, registries=registries)
+
+        self.assertEqual(result.output["category"], "refund")
+        self.assertEqual(result.tokens, 15)
+        self.assertEqual(captured["model"], "fuelix-model")
+        self.assertEqual(captured["tools"][0]["name"], "search_knowledge_base")
+
+    def test_fuelix_provider_registered_in_factory(self) -> None:
+        self.assertIn("fuelix", PROVIDER_NAMES)
+        provider = create_provider("fuelix", model="fuelix-model")
+        self.assertIsInstance(provider, FuelIXAgentProvider)
+        self.assertEqual(provider.model, "fuelix-model")
 
 
 

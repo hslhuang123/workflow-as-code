@@ -118,6 +118,8 @@ python -m unittest discover -s tests
 - Keep task functions deterministic. LLM or reasoning behavior belongs in `agent` nodes.
 - Preserve fake provider behavior for deterministic tests.
 - Anthropic provider behavior must stay isolated behind the provider interface and covered by stubbed transport tests.
+- Provider names are `fake`, `anthropic`, and `fuelix`; keep provider adapters behind `wf.providers.create_provider`.
+- Fuel iX uses the Anthropic-compatible provider path with `FUELIX_API_KEY` or `ANTHROPIC_AUTH_TOKEN`.
 - When adding a workflow, add a test in `tests/test_mvp.py` that compiles and runs it.
 
 ## Current example workflows

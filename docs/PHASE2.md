@@ -97,10 +97,10 @@ Provider selection is part of CLI polish because both `wf run` and `wf run-yaml`
 | Setting | Contract |
 |---|---|
 | Default provider | `fake` |
-| Allowed providers | `fake`, `anthropic` |
+| Allowed providers | `fake`, `anthropic`, `fuelix` |
 | Unknown provider | nonzero exit; message includes provider name and allowed values |
 | Anthropic model default | documented default in README and provider module |
-| Anthropic model override | `--model <model>` or documented environment variable |
+| Anthropic/Fuel iX model override | `--model <model>` or documented environment variable |
 
 ### Acceptance
 
@@ -215,15 +215,15 @@ Make `agent` nodes call a real model while keeping deterministic fake provider t
 
 | Area | Phase 2 contract |
 |---|---|
-| Provider names | `fake`, `anthropic` |
+| Provider names | `fake`, `anthropic`, `fuelix` |
 | Default provider | `fake` |
 | Request mode | non-streaming only |
-| Model | one documented default Anthropic model; override via `--model` or documented environment variable |
+| Model | one documented default model; override via `--model` or documented environment variable |
 | Structured output | final model response parsed once as JSON and validated against `output_schema` |
 | Tool use | declared tools only; bounded tool/model turns |
 | Turn limit | use node `policy.max_steps` when present; otherwise documented default |
 | Retries | none in Phase 2 unless already provided by existing runtime behavior |
-| Tests | fake provider remains default; Anthropic adapter gets credential-free contract tests with stubbed transport |
+| Tests | fake provider remains default; Anthropic-compatible adapters get credential-free contract tests with stubbed transport |
 
 ### Deliverables
 
@@ -232,9 +232,10 @@ Make `agent` nodes call a real model while keeping deterministic fake provider t
 ```bash
 wf run build/support_triage.ir.json --input examples/support/input.json --provider fake
 wf run build/support_triage.ir.json --input examples/support/input.json --provider anthropic
+wf run build/support_triage.ir.json --input examples/support/input.json --provider fuelix
 ```
 
-- Add `ANTHROPIC_API_KEY` support.
+- Add `ANTHROPIC_API_KEY` support for Anthropic and `FUELIX_API_KEY` / `ANTHROPIC_AUTH_TOKEN` support for Fuel iX.
 - Add `--model <model>` or a documented model environment variable.
 - Implement structured output parsing.
 - Keep `FakeAgentProvider` as the test default.
@@ -259,12 +260,13 @@ Credential-free automated acceptance:
 python -m unittest discover -s tests
 ```
 
-includes stubbed Anthropic adapter tests and fake-provider workflow tests.
+includes stubbed Anthropic/Fuel iX adapter tests and fake-provider workflow tests.
 
 Live-provider acceptance when credentials are available:
 
 ```bash
 ANTHROPIC_API_KEY=... wf run-yaml examples/support/workflow.yaml --input examples/support/input.json --provider anthropic --auto-approve
+FUELIX_API_KEY=... wf run-yaml examples/support/workflow.yaml --input examples/support/input.json --provider fuelix --auto-approve
 ```
 
 runs an actual agent node and returns schema-valid output. If credentials are unavailable, the live smoke is skipped but the stubbed adapter tests remain required.
@@ -371,12 +373,13 @@ wf run-yaml examples/support/workflow.yaml --input examples/support/input.json -
 python -m unittest discover -s tests
 ```
 
-The test suite must include credential-free Anthropic adapter contract tests.
+The test suite must include credential-free Anthropic and Fuel iX adapter contract tests.
 
-When `ANTHROPIC_API_KEY` is available, this live smoke must also pass or produce a documented provider/API failure:
+When `ANTHROPIC_API_KEY` or `FUELIX_API_KEY` is available, this live smoke must also pass or produce a documented provider/API failure:
 
 ```bash
 ANTHROPIC_API_KEY=... wf run-yaml examples/support/workflow.yaml --input examples/support/input.json --provider anthropic --auto-approve
+FUELIX_API_KEY=... wf run-yaml examples/support/workflow.yaml --input examples/support/input.json --provider fuelix --auto-approve
 ```
 
 ## Recommendation
