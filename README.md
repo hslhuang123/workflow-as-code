@@ -235,6 +235,12 @@ Supported node kinds:
 | `wf run-yaml <workflow.yaml> --input <input.json>` | validate, compile in memory, and run |
 | `wf trace --latest` | print latest trace |
 | `wf trace runs/<run_id>/trace.jsonl` | print a specific trace |
+| `wf list [--dir examples] [--json]` | list workflows with name and node count; invalid ones show `invalid` |
+| `wf describe <workflow.yaml> [--ir] [--json]` | summarize schemas, nodes, and routes |
+| `wf graph <workflow.yaml> [--format mermaid\|dot] [--out file]` | print the workflow graph from compiled IR edges |
+| `wf doctor <workflow.yaml> [--input input.json]` | validation/compile/provider checklist; with `--input` also does a real run |
+
+Each run writes `runs/<run_id>/` containing `input.json`, `output.json`, `trace.jsonl`, `workflow.ir.json`, and `summary.json` (status, timestamps, failed node when failed).
 
 ## Workflow structure
 

@@ -29,7 +29,10 @@ def find_expressions(value: Any) -> list[str]:
 def validate_expression_syntax(value: Any, *, context: str) -> None:
     for expr in find_expressions(value):
         if not _REF.match(expr):
-            raise ExpressionError(f"{context}: unsupported expression ${{{expr}}}; use input.x or nodes.<id>.output.y")
+            raise ExpressionError(
+                f"{context}: unsupported expression ${{{expr}}}\n"
+                "  allowed forms: ${input.field}, ${nodes.node_id.output.field}"
+            )
 
 
 def resolve(value: Any, state: dict[str, Any]) -> Any:

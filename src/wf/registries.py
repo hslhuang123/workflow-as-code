@@ -55,6 +55,25 @@ class Registries:
     def has_schema(self, name: str) -> bool:
         return isinstance(getattr(self.schemas, name, None), type)
 
+    def task_names(self) -> list[str]:
+        return _public_callables(self.tasks)
+
+    def tool_names(self) -> list[str]:
+        return _public_callables(self.tools)
+
+    def schema_names(self) -> list[str]:
+        return sorted(
+            name for name, obj in vars(self.schemas).items() if not name.startswith("_") and isinstance(obj, type)
+        )
+
+
+def _public_callables(module: ModuleType) -> list[str]:
+    return sorted(
+        name
+        for name, obj in vars(module).items()
+        if not name.startswith("_") and callable(obj) and getattr(obj, "__module__", None) == module.__name__
+    )
+
 
 def _import(path: str) -> ModuleType:
     try:

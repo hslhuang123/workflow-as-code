@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import difflib
 from collections import defaultdict, deque
+from pathlib import Path
 
 from wf import expressions
 from wf.ir import Node, WorkflowIR
@@ -11,7 +13,7 @@ class WorkflowValidationError(ValueError):
     pass
 
 
-def validate_ir(ir: WorkflowIR, *, check_registries: bool = True) -> None:
+def validate_ir(ir: WorkflowIR, *, check_registries: bool = True, source: str | Path | None = None) -> None:
     errors: list[str] = []
     errors.extend(_validate_top_level(ir))
     node_by_id = {node.id: node for node in ir.nodes}
@@ -23,7 +25,8 @@ def validate_ir(ir: WorkflowIR, *, check_registries: bool = True) -> None:
     if check_registries:
         errors.extend(_validate_registries(ir))
     if errors:
-        raise WorkflowValidationError("workflow validation failed:\n- " + "\n- ".join(errors))
+        header = "workflow validation failed" + (f": {source}" if source else "")
+        raise WorkflowValidationError(header + "\n- " + "\n- ".join(errors))
 
 
 def _validate_top_level(ir: WorkflowIR) -> list[str]:
@@ -105,10 +108,12 @@ def _validate_references(ir: WorkflowIR, node_by_id: dict[str, Node]) -> list[st
     ids = set(node_by_id)
     for node in ir.nodes:
         if node.next and node.next not in ids:
-            errors.append(f"node {node.id!r}: next node {node.next!r} does not exist")
+            errors.append(f"node {node.id!r}: next node {node.next!r} does not exist" + _missing_node_hint(node.next, ids))
         for label, target in node.cases.items():
             if target not in ids:
-                errors.append(f"node {node.id!r}: case {label!r} targets missing node {target!r}")
+                errors.append(
+                    f"node {node.id!r}: case {label!r} targets missing node {target!r}" + _missing_node_hint(target, ids)
+                )
         values = [node.input, node.value]
         if node.switch:
             values.append(node.switch)
@@ -116,8 +121,20 @@ def _validate_references(ir: WorkflowIR, node_by_id: dict[str, Node]) -> list[st
             for expr in expressions.find_expressions(value):
                 parts = expr.split(".")
                 if len(parts) >= 2 and parts[0] == "nodes" and parts[1] not in ids:
-                    errors.append(f"node {node.id!r}: expression references missing node {parts[1]!r}")
+                    errors.append(
+                        f"node {node.id!r}: expression references missing node {parts[1]!r}"
+                        + _missing_node_hint(parts[1], ids)
+                    )
     return errors
+
+
+def _missing_node_hint(target: str, ids: set[str]) -> str:
+    lines = []
+    close = difflib.get_close_matches(target, sorted(ids), n=1)
+    if close:
+        lines.append(f"\n  did you mean {close[0]!r}?")
+    lines.append(f"\n  existing nodes: {', '.join(sorted(ids))}")
+    return "".join(lines)
 
 
 def _validate_reachability(ir: WorkflowIR, node_by_id: dict[str, Node]) -> list[str]:
@@ -178,17 +195,36 @@ def _validate_registries(ir: WorkflowIR) -> list[str]:
         registries = Registries.load(ir.registries)
     except RegistryError as exc:
         return [str(exc)]
-    if not registries.has_schema(ir.input_schema):
-        errors.append(f"unknown input schema {ir.input_schema!r}")
-    if not registries.has_schema(ir.output_schema):
-        errors.append(f"unknown output schema {ir.output_schema!r}")
+    for label, name in (("input", ir.input_schema), ("output", ir.output_schema)):
+        if not registries.has_schema(name):
+            errors.append(
+                f"unknown {label} schema {name!r}" + _hint(name, registries.schema_names(), "schemas", registries.schemas.__name__)
+            )
     for node in ir.nodes:
         if node.kind == "task" and node.uses and not registries.has_task(node.uses):
-            errors.append(f"node {node.id!r}: unknown task {node.uses!r}")
+            errors.append(
+                f"node {node.id!r}: unknown task {node.uses!r}"
+                + _hint(node.uses, registries.task_names(), "tasks", registries.tasks.__name__)
+            )
         if node.kind == "agent":
             if node.output_schema and not registries.has_schema(node.output_schema):
-                errors.append(f"node {node.id!r}: unknown output schema {node.output_schema!r}")
+                errors.append(
+                    f"node {node.id!r}: unknown output schema {node.output_schema!r}"
+                    + _hint(node.output_schema, registries.schema_names(), "schemas", registries.schemas.__name__)
+                )
             for tool in node.tools:
                 if not registries.has_tool(tool):
-                    errors.append(f"node {node.id!r}: unknown tool {tool!r}")
+                    errors.append(
+                        f"node {node.id!r}: unknown tool {tool!r}"
+                        + _hint(tool, registries.tool_names(), "tools", registries.tools.__name__)
+                    )
     return errors
+
+
+def _hint(name: str, available: list[str], noun: str, module: str) -> str:
+    close = difflib.get_close_matches(name, available, n=1)
+    if close:
+        return f"\n  did you mean {close[0]!r}?"
+    if available:
+        return f"\n  available {noun} in {module}: {', '.join(available)}"
+    return f"\n  no {noun} found in {module}"

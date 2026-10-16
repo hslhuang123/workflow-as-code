@@ -164,6 +164,34 @@ class MvpTests(unittest.TestCase):
             self.assertIn("unreachable nodes", str(unreachable_error.exception))
             self.assertIn("unused_output", str(unreachable_error.exception))
 
+    def test_validation_diagnostics_include_hints_and_path(self) -> None:
+        source = Path("examples/restaurant_takeout/workflow.yaml").read_text(encoding="utf-8")
+        cases = {
+            "unknown_task": (
+                source.replace("uses: calculate_total", "uses: calcualte_total"),
+                ["unknown task 'calcualte_total'", "did you mean 'calculate_total'?"],
+            ),
+            "missing_case_target": (
+                source.replace("valid: calculate_total", "valid: calculate_totl"),
+                ["case 'valid' targets missing node 'calculate_totl'", "did you mean 'calculate_total'?", "existing nodes:", "finish_rejected"],
+            ),
+            "bad_expression": (
+                source.replace("${input.customer_name}", "${customer_name}"),
+                ["unsupported expression ${customer_name}", "${input.field}", "${nodes.node_id.output.field}"],
+            ),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, (text, expected) in cases.items():
+                with self.subTest(name):
+                    path = Path(tmp) / f"{name}.yaml"
+                    path.write_text(text, encoding="utf-8")
+                    with self.assertRaises(Exception) as error:
+                        compile_file(path)
+                    message = str(error.exception)
+                    self.assertIn(f"workflow validation failed: {path}", message)
+                    for fragment in expected:
+                        self.assertIn(fragment, message)
+
     def test_runtime_failure_contracts(self) -> None:
         ir = compile_file("examples/restaurant_takeout/workflow.yaml")
         with self.assertRaises(ValidationError) as input_error:
@@ -197,6 +225,67 @@ class MvpTests(unittest.TestCase):
             self.assertIn("Order accepted for Nova", stdout.getvalue())
             self.assertIn("finish_accepted", stdout.getvalue())
             self.assertIn("trace:", stderr.getvalue())
+            run_dirs = [path for path in Path(tmp).iterdir() if path.is_dir()]
+            self.assertEqual(len(run_dirs), 1)
+            run_dir = run_dirs[0]
+            for filename in ["input.json", "output.json", "trace.jsonl", "workflow.ir.json", "summary.json"]:
+                self.assertTrue((run_dir / filename).exists(), filename)
+            summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["status"], "succeeded")
+            self.assertEqual(summary["workflow"], "restaurant_takeout")
+
+    def test_list_reports_invalid_workflow_concisely_and_json_keeps_detail(self) -> None:
+        source = Path("examples/restaurant_takeout/workflow.yaml").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad" / "workflow.yaml"
+            bad.parent.mkdir()
+            bad.write_text(source.replace("uses: calculate_total", "uses: calcualte_total"), encoding="utf-8")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli_main(["list", "--dir", tmp]), 0)
+            text = stdout.getvalue()
+            self.assertIn("invalid", text)
+            self.assertIn("unknown task 'calcualte_total'", text)
+            self.assertEqual(len(text.strip().splitlines()), 1)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                cli_main(["list", "--dir", tmp, "--json"])
+            item = json.loads(stdout.getvalue())[0]
+            self.assertEqual(item["status"], "invalid")
+            self.assertIn("did you mean 'calculate_total'?", item["error"])
+
+    def test_cli_list_describe_graph_and_doctor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli_main(["list", "--dir", "examples"]), 0)
+            self.assertIn("restaurant_takeout", stdout.getvalue())
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli_main(["describe", "examples/restaurant_takeout/workflow.yaml"]), 0)
+            self.assertIn("Workflow: restaurant_takeout", stdout.getvalue())
+            self.assertIn("route_order_status", stdout.getvalue())
+
+            graph_path = Path(tmp) / "graph.mmd"
+            self.assertEqual(cli_main(["graph", "examples/restaurant_takeout/workflow.yaml", "--out", str(graph_path)]), 0)
+            graph = graph_path.read_text(encoding="utf-8")
+            self.assertIn("flowchart TD", graph)
+            self.assertIn("route_order_status -->|valid| calculate_total", graph)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli_main([
+                    "doctor",
+                    "examples/restaurant_takeout/workflow.yaml",
+                    "--input",
+                    "examples/restaurant_takeout/input.json",
+                    "--run-root",
+                    tmp,
+                ]), 0)
+            self.assertIn("[ok] validate", stdout.getvalue())
+            self.assertIn("[ok] run", stdout.getvalue())
 
     def test_trace_malformed_json_reports_line(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

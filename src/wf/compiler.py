@@ -16,7 +16,7 @@ class CompileError(ValueError):
 def compile_file(path: str | Path) -> WorkflowIR:
     data = load_yaml_file(path)
     ir = compile_mapping(data)
-    validate_ir(ir)
+    validate_ir(ir, source=path)
     return ir
 
 
