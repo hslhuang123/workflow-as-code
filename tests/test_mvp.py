@@ -113,7 +113,7 @@ class MvpTests(unittest.TestCase):
 
             self.assertEqual(result.output, {
                 "status": "accepted",
-                "message": "Order accepted for Michael",
+                "message": "Order accepted for Nova",
                 "total": 21.77,
             })
 
@@ -176,7 +176,7 @@ class MvpTests(unittest.TestCase):
             missing_input.write_text(_workflow_yaml(omit_customer_name=True), encoding="utf-8")
             missing_ir = compile_file(missing_input)
             with self.assertRaises(ValidationError) as task_input_error:
-                WorkflowRuntime(missing_ir, run_root=tmp).run({"customer_name": "Michael", "items": ["burger"]}, auto_approve=True)
+                WorkflowRuntime(missing_ir, run_root=tmp).run({"customer_name": "Nova", "items": ["burger"]}, auto_approve=True)
             self.assertIn("node create_order", str(task_input_error.exception))
             self.assertIn("missing inputs: customer_name", str(task_input_error.exception))
 
@@ -194,7 +194,7 @@ class MvpTests(unittest.TestCase):
                     tmp,
                 ]), 0)
                 self.assertEqual(cli_main(["trace", "--latest", "--run-root", tmp]), 0)
-            self.assertIn("Order accepted for Michael", stdout.getvalue())
+            self.assertIn("Order accepted for Nova", stdout.getvalue())
             self.assertIn("finish_accepted", stdout.getvalue())
             self.assertIn("trace:", stderr.getvalue())
 
@@ -375,7 +375,7 @@ class MvpTests(unittest.TestCase):
             payload = json.loads(result.input_path.read_text(encoding="utf-8"))
             with tempfile.TemporaryDirectory() as tmp:
                 run = WorkflowRuntime(ir, run_root=tmp).run(payload, auto_approve=True)
-            self.assertEqual(run.output, {"message": "Hello, Michael!"})
+            self.assertEqual(run.output, {"message": "Welcome aboard, Nova — your workflow is running!"})
             self.assertTrue((Path("tests") / "test_hello_world.py").exists())
         finally:
             shutil.rmtree(base, ignore_errors=True)

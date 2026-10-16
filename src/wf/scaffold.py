@@ -152,10 +152,10 @@ from {package}.schemas import Greeting
 
 
 def create_greeting(name: str) -> Greeting:
-    return Greeting(message=f"Hello, {{name}}!")
+    return Greeting(message=f"Welcome aboard, {{name}} — your workflow is running!")
 """,
         "tools.py": '"""No agent tools are needed for this workflow."""\n',
-        "input.json": '{\n  "name": "Michael"\n}\n',
+        "input.json": '{\n  "name": "Nova"\n}\n',
         "workflow.yaml": _common_workflow_header(name, package, "BasicInput", "BasicResult") + """
 nodes:
   - id: create_greeting
@@ -347,7 +347,7 @@ def create_draft(name: str) -> Draft:
     return Draft(message=f"Hello, {{name}}!")
 """,
         "tools.py": '"""No agent tools are needed for this workflow."""\n',
-        "input.json": '{\n  "name": "Michael"\n}\n',
+        "input.json": '{\n  "name": "Nova"\n}\n',
         "workflow.yaml": _common_workflow_header(name, package, "HumanInput", "HumanResult") + """
 nodes:
   - id: create_draft

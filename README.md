@@ -1,235 +1,69 @@
 # Workflow as Code
 
-A local workflow-as-code MVP. Define workflows in YAML, compile them into a JSON intermediate representation, and run them with a Python runtime.
+Define workflows in YAML, wire Python task/tool/schema registries, compile to JSON IR, run locally, and inspect traces.
 
-## What this project does
+## Table of contents
 
-The MVP proves this flow:
-
-```text
-workflow.yaml -> compile -> build/*.ir.json -> run -> trace.jsonl
-```
-
-## Architecture
-
-```mermaid
-flowchart TD
-    A[Workflow author<br/>writes YAML] --> B[workflow.yaml]
-    C[Developer<br/>writes Python building blocks] --> D[schemas.py<br/>tasks.py<br/>tools.py]
-
-    B --> E[wf validate<br/>check graph, schemas, references]
-    D --> E
-    E --> F[wf compile<br/>YAML to JSON IR]
-    F --> G[build/*.ir.json<br/>canonical workflow graph]
-    G --> H[wf run<br/>local runtime]
-
-    H --> I[Task nodes<br/>deterministic Python functions]
-    H --> J[Agent nodes<br/>provider interface / fake provider]
-    H --> K[Router nodes<br/>choose next path]
-    H --> L[Human nodes<br/>approval gate]
-    H --> M[Output node<br/>final JSON result]
-
-    I --> N[runs/&lt;run_id&gt;/trace.jsonl]
-    J --> N
-    K --> N
-    L --> N
-    M --> N
-```
-
-Human view:
-
-| Layer | What the user sees | What the engine uses |
-|---|---|---|
-| Authoring | `workflow.yaml`, `input.json` | YAML workflow definition |
-| Building blocks | `schemas.py`, `tasks.py`, `tools.py` | Importable Python registries |
-| Compile step | `wf compile ... --out build/name.ir.json` | JSON IR graph |
-| Runtime | `wf run build/name.ir.json --input input.json` | Nodes, edges, state, providers |
-| Debugging | `runs/<run_id>/trace.jsonl` | Per-node execution events |
-
-Supported node kinds:
-
-| Kind | Purpose |
-|---|---|
-| `task` | Run a deterministic Python function from a task registry |
-| `agent` | Run an LLM-style node through the provider interface; currently backed by a deterministic fake provider |
-| `router` | Route to another node based on prior output |
-| `human` | Pause for approval; local smoke runs can use `--auto-approve` |
-| `output` | Produce final workflow output |
-
-## Requirements
-
-- Python 3.10+
-- No required third-party Python packages for the current MVP
-
-Commands below assume you are at the repository root.
+- [Quick start](#quick-start)
+- [Create a workflow](#create-a-workflow)
+- [Architecture](#architecture)
+- [Commands](#commands)
+- [Workflow structure](#workflow-structure)
+- [Providers](#providers)
+- [Examples](#examples)
+- [IR and traces](#ir-and-traces)
+- [Limitations](#limitations)
 
 ## Quick start
-
-Create a virtual environment and install the local CLI:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-```
 
-Validate the restaurant workflow:
-
-```bash
 wf validate examples/restaurant_takeout/workflow.yaml
-```
-
-Run the YAML workflow directly:
-
-```bash
 wf run-yaml examples/restaurant_takeout/workflow.yaml \
   --input examples/restaurant_takeout/input.json
 ```
 
-Current sample input in `examples/restaurant_takeout/input.json`:
+Sample input in `examples/restaurant_takeout/input.json`:
 
 ```json
 {
-  "customer_name": "Michael",
+  "customer_name": "Nova",
   "items": ["burger", "fries", "soda"]
 }
 ```
 
-This means Michael is ordering burger, fries, and soda. Prices are defined in `examples/restaurant_takeout/tasks.py` in the `_MENU` dictionary.
+Nova is ordering burger, fries, and soda. Prices are defined in `examples/restaurant_takeout/tasks.py` in the `_MENU` dictionary.
 
-Expected stdout with the current sample input:
+Expected stdout:
 
 ```json
 {
-  "message": "Order accepted for Michael",
+  "message": "Order accepted for Nova",
   "status": "accepted",
   "total": 21.77
 }
 ```
 
-Expected stderr includes the run id and trace path:
+The run also prints a run id and trace path on stderr:
 
 ```text
 run_id: <run_id>
 trace: runs/<run_id>/trace.jsonl
 ```
 
-Inspect the latest trace:
+Inspect the latest trace and run tests:
 
 ```bash
 wf trace --latest
-```
-
-Run all tests:
-
-```bash
 python -m unittest discover -s tests
 ```
 
-## Compile/run separately
+## Create a workflow
 
-`wf run-yaml` is the easiest command for local usage. The lower-level commands remain available when you want to inspect or reuse compiled IR:
-
-```bash
-wf compile examples/restaurant_takeout/workflow.yaml --out build/restaurant_takeout.ir.json
-wf run build/restaurant_takeout.ir.json --input examples/restaurant_takeout/input.json
-```
-
-## Workflow folder structure
-
-Each workflow example uses this shape:
-
-```text
-examples/<workflow_name>/
-  __init__.py
-  workflow.yaml
-  input.json
-  schemas.py
-  tasks.py
-  tools.py
-```
-
-Meaning:
-
-| File | Purpose |
-|---|---|
-| `workflow.yaml` | Workflow graph: nodes, routing, registries, input/output schemas |
-| `input.json` | Sample runtime input |
-| `schemas.py` | Dataclass contracts used by validation/runtime |
-| `tasks.py` | Deterministic task functions referenced by `uses:` |
-| `tools.py` | Agent tool registry, or placeholder when unused |
-| `__init__.py` | Makes the folder importable |
-
-## Example workflows
-
-| Folder | Workflow name | Purpose |
-|---|---|---|
-| `examples/restaurant_takeout/` | `restaurant_takeout` | Validates takeout items and calculates total |
-| `examples/exchange/` | `exchange` | Converts money using deterministic exchange-rate tasks |
-| `examples/test_workflow/` | `test_triage` | Classifies a test message and routes refund through exchange steps |
-| `examples/support/` | `support_triage` | Support-ticket triage with agent and human approval nodes |
-
-## Providers
-
-Agent nodes use a provider selected at runtime.
-
-| Provider | Purpose |
-|---|---|
-| `fake` | Default deterministic provider for tests and local demos |
-| `anthropic` | Real Anthropic Messages API adapter |
-| `fuelix` | Fuel iX Anthropic-compatible API adapter |
-
-Use the fake provider explicitly:
-
-```bash
-wf run-yaml examples/support/workflow.yaml \
-  --input examples/support/input.json \
-  --provider fake \
-  --auto-approve
-```
-
-Use Anthropic when credentials are available:
-
-```bash
-ANTHROPIC_API_KEY=... wf run-yaml examples/support/workflow.yaml \
-  --input examples/support/input.json \
-  --provider anthropic \
-  --model claude-3-5-sonnet-20241022 \
-  --auto-approve
-```
-
-Use Fuel iX when credentials are available:
-
-```bash
-FUELIX_API_KEY=... wf run-yaml examples/support/workflow.yaml \
-  --input examples/support/input.json \
-  --provider fuelix \
-  --model claude-3-5-sonnet-20241022 \
-  --auto-approve
-```
-
-Fuel iX also accepts the Claude Code-style environment variables:
-
-```bash
-ANTHROPIC_BASE_URL=https://api.fuelix.ai
-ANTHROPIC_AUTH_TOKEN=...
-```
-
-Provider rules:
-
-- default provider: `fake`
-- allowed providers: `fake`, `anthropic`, `fuelix`
-- Anthropic and Fuel iX are non-streaming in this phase
-- Anthropic requires `ANTHROPIC_API_KEY`
-- Fuel iX requires `FUELIX_API_KEY` or `ANTHROPIC_AUTH_TOKEN`
-- Fuel iX base URL defaults to `https://api.fuelix.ai`; override with `FUELIX_BASE_URL` or `ANTHROPIC_BASE_URL`
-- model can be set with `--model`, `ANTHROPIC_MODEL`, or provider-specific configuration
-- agent output must be valid JSON matching the node `output_schema`
-- agents may call only tools listed on the node
-
-## Create your first workflow
-
-Use `wf init` to scaffold a valid workflow folder:
+Scaffold a valid workflow:
 
 ```bash
 wf init my_workflow
@@ -237,15 +71,15 @@ wf validate examples/my_workflow/workflow.yaml
 wf run-yaml examples/my_workflow/workflow.yaml --input examples/my_workflow/input.json
 ```
 
-Expected output from the default `basic` template:
+Default output from the `basic` template:
 
 ```json
 {
-  "message": "Hello, Michael!"
+  "message": "Welcome aboard, Nova — your workflow is running!"
 }
 ```
 
-The command creates:
+Generated files:
 
 ```text
 examples/my_workflow/
@@ -257,69 +91,142 @@ examples/my_workflow/
   tools.py
 ```
 
-Templates:
+Templates and useful flags:
 
-| Template | Shape |
+| Command | Purpose |
 |---|---|
-| `basic` | task → output |
-| `router` | task → router → two outputs |
-| `agent` | task → agent → output |
-| `human` | task → human approval → output |
+| `wf init name --template basic` | task → output |
+| `wf init name --template router` | task → router → two outputs |
+| `wf init name --template agent` | task → agent → output |
+| `wf init name --template human` | task → human approval → output |
+| `wf init name --dir workflows` | create outside `examples/` |
+| `wf init name --with-test` | generate `tests/test_<name>.py` |
+| `wf init name --force` | replace an existing workflow folder |
+
+After editing generated files, rerun `wf validate`.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[workflow.yaml + input.json] --> B[wf validate]
+    C[schemas.py / tasks.py / tools.py] --> B
+    B --> D[wf compile / run-yaml]
+    D --> E[JSON IR]
+    E --> F[local runtime]
+    F --> G[task / agent / router / human / output nodes]
+    G --> H[runs/<run_id>/trace.jsonl]
+```
+
+Supported node kinds:
+
+| Kind | Purpose |
+|---|---|
+| `task` | deterministic Python function |
+| `agent` | provider-backed LLM step |
+| `router` | branch based on prior output |
+| `human` | approval gate; use `--auto-approve` for local smoke runs |
+| `output` | final workflow result |
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `wf init <name>` | scaffold a workflow |
+| `wf validate <workflow.yaml>` | validate workflow YAML |
+| `wf compile <workflow.yaml> --out <file.ir.json>` | compile YAML to JSON IR |
+| `wf run <file.ir.json> --input <input.json>` | run compiled IR |
+| `wf run-yaml <workflow.yaml> --input <input.json>` | validate, compile in memory, and run |
+| `wf trace --latest` | print latest trace |
+| `wf trace runs/<run_id>/trace.jsonl` | print a specific trace |
+
+## Workflow structure
+
+One folder contains one workflow:
+
+```text
+examples/<workflow_name>/
+  __init__.py
+  workflow.yaml
+  input.json
+  schemas.py
+  tasks.py
+  tools.py
+```
+
+| File | Purpose |
+|---|---|
+| `workflow.yaml` | graph, routing, registries, input/output schemas |
+| `input.json` | sample runtime input |
+| `schemas.py` | dataclass contracts |
+| `tasks.py` | deterministic functions referenced by `uses:` |
+| `tools.py` | agent tools, or a placeholder if unused |
+| `__init__.py` | makes the folder importable |
+
+## Providers
+
+Agent nodes use `--provider`.
+
+| Provider | Use |
+|---|---|
+| `fake` | default deterministic provider for tests/demos |
+| `anthropic` | Anthropic Messages API |
+| `fuelix` | Fuel iX Anthropic-compatible API |
 
 Examples:
 
 ```bash
-wf init route_demo --template router
-wf init agent_demo --template agent
-wf init human_demo --template human --with-test
-wf init custom_location --dir workflows
+wf run-yaml examples/support/workflow.yaml \
+  --input examples/support/input.json \
+  --provider fake \
+  --auto-approve
+
+ANTHROPIC_API_KEY=... wf run-yaml examples/support/workflow.yaml \
+  --input examples/support/input.json \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022 \
+  --auto-approve
+
+FUELIX_API_KEY=... wf run-yaml examples/support/workflow.yaml \
+  --input examples/support/input.json \
+  --provider fuelix \
+  --model claude-haiku-5-5 \
+  --auto-approve
 ```
 
-Useful flags:
-
-- `--template basic|router|agent|human`
-- `--dir <directory>` to scaffold outside `examples/`
-- `--with-test` to generate `tests/test_<name>.py`
-- `--force` to replace an existing generated workflow folder
-
-`workflow.yaml` references Python registries in `tasks.py`, `tools.py`, and `schemas.py`. After editing generated files, rerun `wf validate` before running the workflow.
-
-## IR
-
-IR means **Intermediate Representation**. In this project, it is the compiled JSON workflow graph used by the runtime.
-
-Example:
-
-```text
-examples/restaurant_takeout/workflow.yaml
-  -> build/restaurant_takeout.ir.json
-  -> runtime execution
-```
-
-The concept is standard in compilers and systems. The JSON schema here is project-specific.
-
-## Traces
-
-Every run writes a trace file and prints its path on stderr:
-
-```text
-run_id: <run_id>
-trace: runs/<run_id>/trace.jsonl
-```
-
-Inspect the latest trace with:
+Fuel iX also accepts Claude Code-style environment variables:
 
 ```bash
-wf trace --latest
+ANTHROPIC_BASE_URL=https://api.fuelix.ai
+ANTHROPIC_AUTH_TOKEN=...
 ```
 
-Or inspect a specific trace:
+Provider rules: default is `fake`; allowed values are `fake`, `anthropic`, `fuelix`; agent output must be valid JSON matching the node `output_schema`; agents may call only tools listed on the node.
 
-```bash
-wf trace runs/<run_id>/trace.jsonl
+## Examples
+
+| Folder | Workflow | Purpose |
+|---|---|---|
+| `examples/restaurant_takeout/` | `restaurant_takeout` | validates takeout items and calculates total |
+| `examples/exchange/` | `exchange` | converts money using deterministic exchange-rate tasks |
+| `examples/test_workflow/` | `test_triage` | routes refund through exchange steps |
+| `examples/support/` | `support_triage` | support triage with agent and human approval nodes |
+
+## IR and traces
+
+IR means **Intermediate Representation**: the compiled JSON workflow graph used by the runtime.
+
+```text
+workflow.yaml -> build/*.ir.json -> runtime execution
 ```
 
-Example output:
+Every run writes JSONL trace events under:
+
+```text
+runs/<run_id>/trace.jsonl
+```
+
+Human-readable trace example:
 
 ```text
 create_order             task     succeeded
@@ -329,14 +236,11 @@ calculate_total          task     succeeded
 finish_accepted          output   succeeded
 ```
 
-Raw traces are JSONL files. Each line records one executed node, including node id, kind, status, output summary, and routing choices.
+## Limitations
 
-## Current limitations
-
-- No hosted service.
-- No visual builder.
-- Anthropic provider support is local/experimental and non-streaming.
+- No hosted service or visual builder.
+- Anthropic/Fuel iX providers are local, non-streaming adapters.
 - No durable multi-day execution.
 - No parallel branches or sub-workflows.
-- The YAML loader supports only the subset needed by this MVP.
-- Money calculations in examples use floats; production money logic should use `Decimal`.
+- YAML loader supports only the subset needed by this MVP.
+- Example money calculations use floats; production money logic should use `Decimal`.

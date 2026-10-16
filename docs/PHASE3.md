@@ -323,7 +323,7 @@ from examples.my_workflow.schemas import Greeting
 
 
 def create_greeting(name: str) -> Greeting:
-    return Greeting(message=f"Hello, {name}!")
+    return Greeting(message=f"Welcome aboard, {name} — your workflow is running!")
 ```
 
 Generated `tools.py`:
@@ -363,7 +363,7 @@ Generated `input.json`:
 
 ```json
 {
-  "name": "Michael"
+  "name": "Nova"
 }
 ```
 
@@ -371,7 +371,7 @@ Expected run result:
 
 ```json
 {
-  "message": "Hello, Michael!"
+  "message": "Welcome aboard, Nova — your workflow is running!"
 }
 ```
 
@@ -389,7 +389,7 @@ Expected output:
 
 ```json
 {
-  "message": "Hello, Michael!"
+  "message": "Welcome aboard, Nova — your workflow is running!"
 }
 ```
 
