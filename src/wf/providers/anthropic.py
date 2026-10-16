@@ -103,8 +103,10 @@ class AnthropicAgentProvider:
 
     def _http_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {
+            "accept": "application/json",
             "content-type": "application/json",
             "anthropic-version": "2023-06-01",
+            "user-agent": "workflow-as-code/0.1.0",
         }
         if self.auth_mode == "bearer":
             headers["authorization"] = f"Bearer {self.api_key or ''}"

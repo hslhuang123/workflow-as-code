@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from wf.cli import main as cli_main
 from wf.compiler import compile_file, write_ir
@@ -325,6 +326,35 @@ class MvpTests(unittest.TestCase):
         provider = create_provider("fuelix", model="fuelix-model")
         self.assertIsInstance(provider, FuelIXAgentProvider)
         self.assertEqual(provider.model, "fuelix-model")
+
+    def test_fuelix_http_transport_headers(self) -> None:
+        captured = {}
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"content": []}'
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["headers"] = {key.lower(): value for key, value in request.header_items()}
+            captured["timeout"] = timeout
+            return Response()
+
+        provider = FuelIXAgentProvider(api_key="fuelix-test", api_url="https://api.fuelix.ai/v1/messages")
+        with patch("urllib.request.urlopen", fake_urlopen):
+            provider._http_transport({"model": "test", "messages": [], "max_tokens": 1})
+
+        self.assertEqual(captured["url"], "https://api.fuelix.ai/v1/messages")
+        self.assertEqual(captured["headers"]["authorization"], "Bearer fuelix-test")
+        self.assertEqual(captured["headers"]["user-agent"], "workflow-as-code/0.1.0")
+        self.assertEqual(captured["headers"]["accept"], "application/json")
+        self.assertEqual(captured["timeout"], 60)
 
 
 
