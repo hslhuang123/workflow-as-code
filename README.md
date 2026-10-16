@@ -86,6 +86,17 @@ wf run-yaml examples/restaurant_takeout/workflow.yaml \
   --input examples/restaurant_takeout/input.json
 ```
 
+Current sample input in `examples/restaurant_takeout/input.json`:
+
+```json
+{
+  "customer_name": "Michael",
+  "items": ["burger", "fries", "soda"]
+}
+```
+
+This means Michael is ordering burger, fries, and soda. Prices are defined in `examples/restaurant_takeout/tasks.py` in the `_MENU` dictionary.
+
 Expected stdout with the current sample input:
 
 ```json
