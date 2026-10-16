@@ -10,6 +10,42 @@ The MVP proves this flow:
 workflow.yaml -> compile -> build/*.ir.json -> run -> trace.jsonl
 ```
 
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Workflow author<br/>writes YAML] --> B[workflow.yaml]
+    C[Developer<br/>writes Python building blocks] --> D[schemas.py<br/>tasks.py<br/>tools.py]
+
+    B --> E[wf validate<br/>check graph, schemas, references]
+    D --> E
+    E --> F[wf compile<br/>YAML to JSON IR]
+    F --> G[build/*.ir.json<br/>canonical workflow graph]
+    G --> H[wf run<br/>local runtime]
+
+    H --> I[Task nodes<br/>deterministic Python functions]
+    H --> J[Agent nodes<br/>provider interface / fake provider]
+    H --> K[Router nodes<br/>choose next path]
+    H --> L[Human nodes<br/>approval gate]
+    H --> M[Output node<br/>final JSON result]
+
+    I --> N[runs/&lt;run_id&gt;/trace.jsonl]
+    J --> N
+    K --> N
+    L --> N
+    M --> N
+```
+
+Human view:
+
+| Layer | What the user sees | What the engine uses |
+|---|---|---|
+| Authoring | `workflow.yaml`, `input.json` | YAML workflow definition |
+| Building blocks | `schemas.py`, `tasks.py`, `tools.py` | Importable Python registries |
+| Compile step | `wf compile ... --out build/name.ir.json` | JSON IR graph |
+| Runtime | `wf run build/name.ir.json --input input.json` | Nodes, edges, state, providers |
+| Debugging | `runs/<run_id>/trace.jsonl` | Per-node execution events |
+
 Supported node kinds:
 
 | Kind | Purpose |
