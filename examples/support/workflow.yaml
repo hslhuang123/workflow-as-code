@@ -1,0 +1,137 @@
+name: support_triage
+version: 0.1.0
+
+input_schema: TicketInput
+output_schema: TriageResult
+
+registries:
+  tasks: examples.support.tasks
+  tools: examples.support.tools
+  schemas: examples.support.schemas
+
+nodes:
+  - id: fetch_ticket
+    kind: task
+    uses: fetch_ticket
+    input:
+      ticket_id: "${input.ticket_id}"
+    retry:
+      max_attempts: 3
+    timeout_seconds: 10
+
+  - id: classify_ticket
+    kind: agent
+    model: fake-local
+    instructions: |
+      Classify the customer support ticket.
+
+      Categories:
+      - refund: customer asks for money back, cancellation, or compensation
+      - bug: product appears broken
+      - billing: invoices, payment methods, taxes, receipts, failed charges
+      - how_to: product usage question
+      - other: none of the above
+
+      Return a Classification object. Do not draft a reply.
+    input:
+      ticket: "${nodes.fetch_ticket.output}"
+    output_schema: Classification
+    tools:
+      - search_knowledge_base
+    policy:
+      max_steps: 4
+      max_tokens: 1200
+      timeout_seconds: 45
+
+  - id: route_category
+    kind: router
+    switch: "${nodes.classify_ticket.output.category}"
+    cases:
+      refund: draft_refund_reply
+      bug: escalate_bug
+      default: draft_general_reply
+
+  - id: draft_refund_reply
+    kind: agent
+    model: fake-local
+    instructions: |
+      Draft a concise customer reply for a refund request.
+      Mention that a support lead must approve it before sending.
+    input:
+      ticket: "${nodes.fetch_ticket.output}"
+      classification: "${nodes.classify_ticket.output}"
+    output_schema: DraftReply
+    tools:
+      - search_knowledge_base
+    policy:
+      max_steps: 4
+      max_tokens: 1500
+      timeout_seconds: 45
+    next: approve_refund_reply
+
+  - id: approve_refund_reply
+    kind: human
+    input:
+      draft: "${nodes.draft_refund_reply.output}"
+    reviewers:
+      - support-leads
+    timeout_seconds: 86400
+    next: send_refund_reply
+
+  - id: send_refund_reply
+    kind: task
+    uses: send_reply
+    input:
+      ticket: "${nodes.fetch_ticket.output}"
+      draft: "${nodes.approve_refund_reply.output}"
+    next: finish_success
+
+  - id: escalate_bug
+    kind: task
+    uses: escalate_to_support
+    input:
+      ticket: "${nodes.fetch_ticket.output}"
+      reason: "${nodes.classify_ticket.output.rationale}"
+    next: finish_escalated
+
+  - id: draft_general_reply
+    kind: agent
+    model: fake-local
+    instructions: |
+      Draft a helpful customer support reply.
+      Use the knowledge base when needed.
+    input:
+      ticket: "${nodes.fetch_ticket.output}"
+      classification: "${nodes.classify_ticket.output}"
+    output_schema: DraftReply
+    tools:
+      - search_knowledge_base
+    policy:
+      max_steps: 4
+      max_tokens: 1500
+      timeout_seconds: 45
+    next: send_general_reply
+
+  - id: send_general_reply
+    kind: task
+    uses: send_reply
+    input:
+      ticket: "${nodes.fetch_ticket.output}"
+      draft: "${nodes.draft_general_reply.output}"
+    next: finish_success
+
+  - id: finish_success
+    kind: output
+    value:
+      ticket_id: "${nodes.fetch_ticket.output.id}"
+      category: "${nodes.classify_ticket.output.category}"
+      reply_sent: true
+      escalated: false
+
+  - id: finish_escalated
+    kind: output
+    value:
+      ticket_id: "${nodes.fetch_ticket.output.id}"
+      category: "${nodes.classify_ticket.output.category}"
+      reply_sent: false
+      escalated: true

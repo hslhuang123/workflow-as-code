@@ -1,0 +1,78 @@
+name: test_triage
+version: 0.1.0
+
+input_schema: TestInput
+output_schema: TestResult
+
+registries:
+  tasks: examples.test_workflow.tasks
+  tools: examples.test_workflow.tools
+  schemas: examples.test_workflow.schemas
+
+nodes:
+  - id: make_ticket
+    kind: task
+    uses: make_ticket
+    input:
+      message: "${input.message}"
+
+  - id: classify_ticket
+    kind: agent
+    model: fake-local
+    instructions: |
+      Classify the test ticket.
+      Return a Classification object.
+    input:
+      ticket: "${nodes.make_ticket.output}"
+    output_schema: Classification
+    tools:
+      - search_knowledge_base
+    policy:
+      max_steps: 2
+      max_tokens: 500
+      timeout_seconds: 15
+
+  - id: route_category
+    kind: router
+    switch: "${nodes.classify_ticket.output.category}"
+    cases:
+      bug: finish_bug
+      refund: get_exchange_rate
+      default: finish_default
+
+  - id: finish_bug
+    kind: output
+    value:
+      category: "${nodes.classify_ticket.output.category}"
+      handled_by: engineering
+      message: "Bug path selected for ${nodes.make_ticket.output.id}"
+
+  - id: get_exchange_rate
+    kind: task
+    uses: get_exchange_rate
+    input:
+      from_currency: "${input.from_currency}"
+      to_currency: "${input.to_currency}"
+    next: convert_amount
+
+  - id: convert_amount
+    kind: task
+    uses: convert_amount
+    input:
+      amount: "${input.amount}"
+      exchange_rate: "${nodes.get_exchange_rate.output}"
+    next: finish_refund
+
+  - id: finish_refund
+    kind: output
+    value:
+      category: "${nodes.classify_ticket.output.category}"
+      handled_by: billing
+      message: "Refund path selected for ${nodes.make_ticket.output.id}: converted ${nodes.convert_amount.output.original_amount} ${nodes.convert_amount.output.from_currency} to ${nodes.convert_amount.output.converted_amount} ${nodes.convert_amount.output.to_currency}"
+
+  - id: finish_default
+    kind: output
+    value:
+      category: "${nodes.classify_ticket.output.category}"
+      handled_by: support
+      message: "Default path selected for ${nodes.make_ticket.output.id}"

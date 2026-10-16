@@ -1,0 +1,6 @@
+{
+  "message": "I was charged twoce and want a refund.",
+  "amount": 100.0,
+  "from_currency": "USD",
+  "to_currency": "EUR"
+}

@@ -1,0 +1,35 @@
+name: exchange
+version: 0.1.0
+
+input_schema: ExchangeInput
+output_schema: ExchangeResult
+
+registries:
+  tasks: examples.exchange.tasks
+  tools: examples.exchange.tools
+  schemas: examples.exchange.schemas
+
+nodes:
+  - id: get_exchange_rate
+    kind: task
+    uses: get_exchange_rate
+    input:
+      from_currency: "${input.from_currency}"
+      to_currency: "${input.to_currency}"
+
+  - id: convert_amount
+    kind: task
+    uses: convert_amount
+    input:
+      amount: "${input.amount}"
+      exchange_rate: "${nodes.get_exchange_rate.output}"
+
+  - id: finish_exchange
+    kind: output
+    value:
+      original_amount: "${nodes.convert_amount.output.original_amount}"
+      converted_amount: "${nodes.convert_amount.output.converted_amount}"
+      from_currency: "${nodes.convert_amount.output.from_currency}"
+      to_currency: "${nodes.convert_amount.output.to_currency}"
+      rate: "${nodes.convert_amount.output.rate}"
+      message: "Converted ${nodes.convert_amount.output.original_amount} ${nodes.convert_amount.output.from_currency} to ${nodes.convert_amount.output.converted_amount} ${nodes.convert_amount.output.to_currency}"

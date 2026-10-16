@@ -1,0 +1,52 @@
+name: restaurant_takeout
+version: 0.1.0
+
+input_schema: TakeoutInput
+output_schema: TakeoutResult
+
+registries:
+  tasks: examples.restaurant_takeout.tasks
+  tools: examples.restaurant_takeout.tools
+  schemas: examples.restaurant_takeout.schemas
+
+nodes:
+  - id: create_order
+    kind: task
+    uses: create_order
+    input:
+      customer_name: "${input.customer_name}"
+      items: "${input.items}"
+
+  - id: check_menu_items
+    kind: task
+    uses: check_menu_items
+    input:
+      order: "${nodes.create_order.output}"
+
+  - id: route_order_status
+    kind: router
+    switch: "${nodes.check_menu_items.output.status}"
+    cases:
+      valid: calculate_total
+      invalid: finish_rejected
+
+  - id: calculate_total
+    kind: task
+    uses: calculate_total
+    input:
+      order: "${nodes.create_order.output}"
+    next: finish_accepted
+
+  - id: finish_accepted
+    kind: output
+    value:
+      status: accepted
+      message: "Order accepted for ${nodes.create_order.output.customer_name}"
+      total: "${nodes.calculate_total.output.total}"
+
+  - id: finish_rejected
+    kind: output
+    value:
+      status: rejected
+      message: "Order rejected because some items are unavailable"
+      total: 0.0
