@@ -6,6 +6,7 @@ Define workflows in YAML, wire Python task/tool/schema registries, compile to JS
 
 - [Quick start](#quick-start)
 - [Create a workflow](#create-a-workflow)
+- [Customize a workflow](#customize-a-workflow)
 - [Architecture](#architecture)
 - [Commands](#commands)
 - [Workflow structure](#workflow-structure)
@@ -105,6 +106,84 @@ Templates and useful flags:
 
 After editing generated files, rerun `wf validate`.
 
+## Customize a workflow
+
+Start from a scaffold, then replace the generated schemas, tasks, input, and YAML wiring. Example: a pizza store order workflow.
+
+```bash
+wf init pizza_store --template router
+```
+
+Edit `examples/pizza_store/input.json`:
+
+```json
+{
+  "customer_name": "Nova",
+  "pizza": "margherita",
+  "size": "large"
+}
+```
+
+Define the data contracts in `examples/pizza_store/schemas.py`:
+
+```python
+@dataclass(frozen=True)
+class PizzaInput:
+    customer_name: str
+    pizza: str
+    size: str
+
+@dataclass(frozen=True)
+class PizzaCheck:
+    status: Literal["available", "unavailable"]
+
+@dataclass(frozen=True)
+class PizzaResult:
+    status: str
+    message: str
+    total: float
+```
+
+Put deterministic business logic in `examples/pizza_store/tasks.py`:
+
+```python
+MENU = {"margherita": 14.0, "pepperoni": 16.0}
+SIZE_MULTIPLIER = {"small": 1.0, "large": 1.4}
+
+def check_pizza(pizza: str) -> PizzaCheck:
+    return PizzaCheck(status="available" if pizza in MENU else "unavailable")
+
+def calculate_total(pizza: str, size: str) -> float:
+    return round(MENU[pizza] * SIZE_MULTIPLIER[size], 2)
+```
+
+Wire those functions in `examples/pizza_store/workflow.yaml`:
+
+```yaml
+nodes:
+  - id: check_pizza
+    kind: task
+    uses: check_pizza
+    input:
+      pizza: "${input.pizza}"
+
+  - id: route_availability
+    kind: router
+    switch: "${nodes.check_pizza.output.status}"
+    cases:
+      available: calculate_total
+      unavailable: finish_unavailable
+```
+
+Then validate and run:
+
+```bash
+wf validate examples/pizza_store/workflow.yaml
+wf run-yaml examples/pizza_store/workflow.yaml --input examples/pizza_store/input.json
+```
+
+Rule of thumb: `schemas.py` defines data, `tasks.py` defines deterministic work, `tools.py` defines agent tools, and `workflow.yaml` wires the graph.
+
 ## Architecture
 
 ```mermaid
@@ -117,6 +196,23 @@ flowchart TD
     F --> G[task / agent / router / human / output nodes]
     G --> H[runs/<run_id>/trace.jsonl]
 ```
+
+Architecture components:
+
+| Component | Meaning |
+|---|---|
+| `workflow.yaml` | Declarative graph: node ids, node kinds, routing, registry paths, policies |
+| `input.json` | Runtime payload passed into the workflow |
+| `schemas.py` | Dataclass contracts for workflow input, intermediate outputs, and final output |
+| `tasks.py` | Deterministic Python functions used by `task` nodes |
+| `tools.py` | Functions an `agent` node is allowed to call |
+| `wf validate` | Checks graph shape, references, schemas, task/tool names, reachability |
+| `wf compile` | Converts YAML into JSON IR on disk |
+| `wf run-yaml` | Validates, compiles in memory, and runs in one command |
+| JSON IR | Canonical machine-readable workflow graph used by the runtime |
+| local runtime | Executes nodes, tracks state, validates outputs, calls providers/tools |
+| nodes | Executable workflow steps: `task`, `agent`, `router`, `human`, `output` |
+| `trace.jsonl` | Per-node execution log for debugging and replay inspection |
 
 Supported node kinds:
 

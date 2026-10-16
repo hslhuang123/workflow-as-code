@@ -254,7 +254,7 @@ Creates:
 tests/test_pizza_order.py
 ```
 
-Recommendation: create a separate test file instead of appending to `tests/test_mvp.py`.
+Recommendation: create a separate test file instead of appending to the shared regression suite.
 
 ### Acceptance
 

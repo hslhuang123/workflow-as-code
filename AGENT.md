@@ -36,7 +36,7 @@ examples/
   support/
   test_workflow/
 tests/
-  test_mvp.py
+  test_regression.py
 ```
 
 ## Workflow folder convention
@@ -128,7 +128,7 @@ python -m unittest discover -s tests
 - Fuel iX uses the Anthropic-compatible provider path with `FUELIX_API_KEY` or `ANTHROPIC_AUTH_TOKEN`.
 - `wf init` owns workflow scaffolding; templates must generate workflows that validate and run before edits.
 - Scaffolded workflow names are normalized and must not permit path traversal.
-- When adding a hand-written workflow, add a test in `tests/test_mvp.py` or a dedicated `tests/test_<workflow>.py` that compiles and runs it.
+- When adding a hand-written workflow, add a test in `tests/test_regression.py` or a dedicated `tests/test_<workflow>.py` that compiles and runs it.
 
 ## Current example workflows
 
