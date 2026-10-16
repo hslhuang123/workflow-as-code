@@ -53,9 +53,11 @@ Make normal commands simple and reduce the need for `PYTHONPATH` in day-to-day u
 
 ### Deliverables
 
-- Ensure editable install works cleanly:
+- Ensure editable install works cleanly inside a virtual environment:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
 ```
 
@@ -103,6 +105,8 @@ Provider selection is part of CLI polish because both `wf run` and `wf run-yaml`
 ### Acceptance
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
 wf validate examples/restaurant_takeout/workflow.yaml
 wf run-yaml examples/restaurant_takeout/workflow.yaml --input examples/restaurant_takeout/input.json
@@ -297,6 +301,8 @@ The README contains a clean-environment walkthrough from clone:
 ```bash
 git clone <repo-url>
 cd workflow-as-code
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
 wf run-yaml examples/restaurant_takeout/workflow.yaml --input examples/restaurant_takeout/input.json
 wf trace --latest
@@ -356,6 +362,8 @@ Generated artifacts remain ignored and uncommitted:
 Phase 2 is done when these work locally from a clean clone after editable install:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
 wf run-yaml examples/restaurant_takeout/workflow.yaml --input examples/restaurant_takeout/input.json
 wf trace --latest

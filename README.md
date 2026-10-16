@@ -65,29 +65,28 @@ Commands below assume you are at the repository root.
 
 ## Quick start
 
+Create a virtual environment and install the local CLI:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
 Validate the restaurant workflow:
 
 ```bash
-PYTHONPATH=src:. python -m wf.cli validate examples/restaurant_takeout/workflow.yaml
+wf validate examples/restaurant_takeout/workflow.yaml
 ```
 
-Compile it:
+Run the YAML workflow directly:
 
 ```bash
-PYTHONPATH=src:. python -m wf.cli compile \
-  examples/restaurant_takeout/workflow.yaml \
-  --out build/restaurant_takeout.ir.json
-```
-
-Run it:
-
-```bash
-PYTHONPATH=src:. python -m wf.cli run \
-  build/restaurant_takeout.ir.json \
+wf run-yaml examples/restaurant_takeout/workflow.yaml \
   --input examples/restaurant_takeout/input.json
 ```
 
-Expected output with the current sample input:
+Expected stdout with the current sample input:
 
 ```json
 {
@@ -97,24 +96,30 @@ Expected output with the current sample input:
 }
 ```
 
+Expected stderr includes the run id and trace path:
+
+```text
+run_id: <run_id>
+trace: runs/<run_id>/trace.jsonl
+```
+
+Inspect the latest trace:
+
+```bash
+wf trace --latest
+```
+
 Run all tests:
 
 ```bash
-PYTHONPATH=src:. python -m unittest discover -s tests
+python -m unittest discover -s tests
 ```
 
-## Optional editable install
+## Compile/run separately
 
-Instead of setting `PYTHONPATH` every time:
-
-```bash
-python -m pip install -e .
-```
-
-Then use:
+`wf run-yaml` is the easiest command for local usage. The lower-level commands remain available when you want to inspect or reuse compiled IR:
 
 ```bash
-wf validate examples/restaurant_takeout/workflow.yaml
 wf compile examples/restaurant_takeout/workflow.yaml --out build/restaurant_takeout.ir.json
 wf run build/restaurant_takeout.ir.json --input examples/restaurant_takeout/input.json
 ```
@@ -153,6 +158,44 @@ Meaning:
 | `examples/test_workflow/` | `test_triage` | Classifies a test message and routes refund through exchange steps |
 | `examples/support/` | `support_triage` | Support-ticket triage with agent and human approval nodes |
 
+## Providers
+
+Agent nodes use a provider selected at runtime.
+
+| Provider | Purpose |
+|---|---|
+| `fake` | Default deterministic provider for tests and local demos |
+| `anthropic` | Real Anthropic Messages API adapter |
+
+Use the fake provider explicitly:
+
+```bash
+wf run-yaml examples/support/workflow.yaml \
+  --input examples/support/input.json \
+  --provider fake \
+  --auto-approve
+```
+
+Use Anthropic when credentials are available:
+
+```bash
+ANTHROPIC_API_KEY=... wf run-yaml examples/support/workflow.yaml \
+  --input examples/support/input.json \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022 \
+  --auto-approve
+```
+
+Provider rules:
+
+- default provider: `fake`
+- allowed providers: `fake`, `anthropic`
+- Anthropic is non-streaming in this phase
+- Anthropic requires `ANTHROPIC_API_KEY`
+- Anthropic model can be set with `--model` or `ANTHROPIC_MODEL`
+- agent output must be valid JSON matching the node `output_schema`
+- agents may call only tools listed on the node
+
 ## Build a new workflow
 
 1. Create a folder:
@@ -186,25 +229,42 @@ The concept is standard in compilers and systems. The JSON schema here is projec
 
 ## Traces
 
-Every run writes a trace file:
+Every run writes a trace file and prints its path on stderr:
 
 ```text
-runs/<run_id>/trace.jsonl
+run_id: <run_id>
+trace: runs/<run_id>/trace.jsonl
 ```
 
-Inspect it with:
+Inspect the latest trace with:
 
 ```bash
-cat runs/<run_id>/trace.jsonl
+wf trace --latest
 ```
 
-Each line records one executed node, including node id, kind, status, output summary, and routing choices.
+Or inspect a specific trace:
+
+```bash
+wf trace runs/<run_id>/trace.jsonl
+```
+
+Example output:
+
+```text
+create_order             task     succeeded
+check_menu_items         task     succeeded
+route_order_status       router   succeeded  selected=valid target=calculate_total
+calculate_total          task     succeeded
+finish_accepted          output   succeeded
+```
+
+Raw traces are JSONL files. Each line records one executed node, including node id, kind, status, output summary, and routing choices.
 
 ## Current limitations
 
 - No hosted service.
 - No visual builder.
-- No real LLM provider wired into CLI selection yet.
+- Anthropic provider support is local/experimental and non-streaming.
 - No durable multi-day execution.
 - No parallel branches or sub-workflows.
 - The YAML loader supports only the subset needed by this MVP.

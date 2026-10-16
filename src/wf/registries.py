@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import sys
 from dataclasses import asdict, fields, is_dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
@@ -57,8 +59,14 @@ class Registries:
 def _import(path: str) -> ModuleType:
     try:
         return importlib.import_module(path)
-    except Exception as exc:
-        raise RegistryError(f"cannot import registry {path!r}: {exc}") from exc
+    except Exception as first_exc:
+        cwd = str(Path.cwd())
+        if cwd not in sys.path:
+            sys.path.insert(0, cwd)
+        try:
+            return importlib.import_module(path)
+        except Exception as exc:
+            raise RegistryError(f"cannot import registry {path!r}: {exc}") from first_exc
 
 
 def _get_callable(module: ModuleType, name: str, kind: str) -> Any:

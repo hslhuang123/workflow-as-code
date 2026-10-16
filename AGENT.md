@@ -66,37 +66,58 @@ Rules:
 
 Run commands from the repository root.
 
+Create a virtual environment and install CLI for local use:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
 Validate a workflow:
 
 ```bash
-PYTHONPATH=src:. python -m wf.cli validate examples/restaurant_takeout/workflow.yaml
+wf validate examples/restaurant_takeout/workflow.yaml
 ```
 
 Compile YAML to IR:
 
 ```bash
-PYTHONPATH=src:. python -m wf.cli compile examples/restaurant_takeout/workflow.yaml --out build/restaurant_takeout.ir.json
+wf compile examples/restaurant_takeout/workflow.yaml --out build/restaurant_takeout.ir.json
 ```
 
 Run compiled IR:
 
 ```bash
-PYTHONPATH=src:. python -m wf.cli run build/restaurant_takeout.ir.json --input examples/restaurant_takeout/input.json
+wf run build/restaurant_takeout.ir.json --input examples/restaurant_takeout/input.json
+```
+
+Run YAML directly:
+
+```bash
+wf run-yaml examples/restaurant_takeout/workflow.yaml --input examples/restaurant_takeout/input.json
+```
+
+Inspect traces:
+
+```bash
+wf trace --latest
 ```
 
 Run tests:
 
 ```bash
-PYTHONPATH=src:. python -m unittest discover -s tests
+python -m unittest discover -s tests
 ```
 
 ## Implementation notes
 
 - Avoid adding dependencies unless needed. The current YAML loader is dependency-free and intentionally minimal.
-- The runtime reads compiled IR JSON, not YAML. Recompile after editing `workflow.yaml`.
+- The runtime reads compiled IR JSON for `wf run`; `wf run-yaml` compiles in memory.
 - Keep workflow YAML declarative. Put executable business logic in `tasks.py` or `tools.py`.
 - Keep task functions deterministic. LLM or reasoning behavior belongs in `agent` nodes.
 - Preserve fake provider behavior for deterministic tests.
+- Anthropic provider behavior must stay isolated behind the provider interface and covered by stubbed transport tests.
 - When adding a workflow, add a test in `tests/test_mvp.py` that compiles and runs it.
 
 ## Current example workflows
@@ -113,5 +134,5 @@ PYTHONPATH=src:. python -m unittest discover -s tests
 Before handing off changes, run the smallest relevant smoke command and the affected test. For broad workflow/runtime changes, run:
 
 ```bash
-PYTHONPATH=src:. python -m unittest discover -s tests
+python -m unittest discover -s tests
 ```
