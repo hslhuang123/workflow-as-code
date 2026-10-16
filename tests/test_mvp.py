@@ -253,6 +253,10 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(captured["model"], "test-model")
         self.assertEqual(captured["tools"][0]["name"], "search_knowledge_base")
         self.assertIn("Classify", captured["system"])
+        self.assertIn("Classification object", captured["system"])
+        self.assertIn("category", captured["system"])
+        self.assertIn("confidence", captured["system"])
+        self.assertIn("rationale", captured["system"])
 
     def test_anthropic_provider_rejects_invalid_json_and_undeclared_tool(self) -> None:
         registries = Registries.load({
@@ -320,6 +324,9 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(result.tokens, 15)
         self.assertEqual(captured["model"], "fuelix-model")
         self.assertEqual(captured["tools"][0]["name"], "search_knowledge_base")
+        self.assertIn("Classification object", captured["system"])
+        self.assertIn("confidence", captured["system"])
+        self.assertIn("rationale", captured["system"])
 
     def test_fuelix_provider_registered_in_factory(self) -> None:
         self.assertIn("fuelix", PROVIDER_NAMES)

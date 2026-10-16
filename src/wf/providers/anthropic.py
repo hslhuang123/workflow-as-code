@@ -6,7 +6,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from dataclasses import is_dataclass
+from dataclasses import fields, is_dataclass
 from typing import Any, Callable, get_args, get_origin, get_type_hints
 
 from wf.ir import Node
@@ -96,7 +96,7 @@ class AnthropicAgentProvider:
         return {
             "model": model,
             "max_tokens": max_tokens,
-            "system": _system_prompt(node),
+            "system": _system_prompt(node, registries),
             "messages": messages,
             "tools": [_tool_schema(registries.tool(name)) for name in node.tools],
         }
@@ -157,13 +157,45 @@ def _messages_url(base_url: str) -> str:
     return f"{cleaned}/v1/messages"
 
 
-def _system_prompt(node: Node) -> str:
+def _system_prompt(node: Node, registries: Registries) -> str:
     instructions = node.instructions or ""
+    schema_text = _output_schema_text(node, registries)
     return (
         f"{instructions}\n\n"
-        "Return exactly one JSON object matching the node output schema. "
-        "Do not wrap it in Markdown. Do not include commentary outside JSON."
+        f"Output schema:\n{schema_text}\n\n"
+        "Return exactly one JSON object matching the output schema. "
+        "Include every required field. Do not wrap it in Markdown. "
+        "Do not include commentary outside JSON."
     )
+
+
+def _output_schema_text(node: Node, registries: Registries) -> str:
+    if not node.output_schema:
+        return "No named output schema. Return a JSON object."
+    schema = registries.schema(node.output_schema)
+    if not is_dataclass(schema):
+        return f"{node.output_schema}: JSON value"
+    lines = [f"{node.output_schema} object with required fields:"]
+    type_hints = get_type_hints(schema)
+    for field in fields(schema):
+        annotation = type_hints.get(field.name, field.type)
+        lines.append(f"- {field.name}: {_type_name(annotation)}")
+    return "\n".join(lines)
+
+
+def _type_name(annotation: Any) -> str:
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin is list:
+        inner = _type_name(args[0]) if args else "any"
+        return f"list[{inner}]"
+    if origin is dict:
+        return "object"
+    if origin is not None and str(origin).endswith("Literal"):
+        return " | ".join(repr(arg) for arg in args)
+    if hasattr(annotation, "__name__"):
+        return annotation.__name__
+    return str(annotation)
 
 
 def _tool_schema(func: Any) -> dict[str, Any]:
